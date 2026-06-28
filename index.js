@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { handleHoneypotMessage } from './honeypot.js';
 import { handleInteraction } from './commands.js';
+import { handleMemberJoin } from './welcome.js';
 
 dotenv.config();
 
@@ -26,6 +27,15 @@ const client = new Client({
 client.once('ready', () => {
   console.log(`\x1b[32m[BAŞARILI] Bot başarıyla bağlandı! Aktif kullanıcı: ${client.user.tag}\x1b[0m`);
   console.log(`[BİLGİ] Davet linki oluşturmak için Client ID: ${process.env.CLIENT_ID || 'Belirtilmemiş'}`);
+});
+
+// Yeni üye katıldığında tetiklenen olay (Rol verme ve hoş geldin mesajı)
+client.on('guildMemberAdd', async (member) => {
+  try {
+    await handleMemberJoin(member);
+  } catch (error) {
+    console.error('[HATA] Yeni üye katılım işlemleri sırasında hata:', error);
+  }
 });
 
 // Yeni mesaj atıldığında honeypot denetimini tetikle
