@@ -40,24 +40,33 @@ export async function handleMemberJoin(member) {
     console.error(`[HATA] Otomatik doğrulanmamış rol (${UNVERIFIED_ROLE_ID}) verilirken hata oluştu:`, error);
   }
 
-  // 3. Doğrulama kanalında kullanıcıyı etiketleyen geçici uyarı mesajı
+  // 3. Doğrulama kanalında SADECE katılan kullanıcının görebileceği geçici izin ve mesaj
   if (VERIFICATION_CHANNEL_ID) {
     try {
       const channel = await member.guild.channels.fetch(VERIFICATION_CHANNEL_ID).catch(() => null);
-      if (channel && channel.isTextBased()) {
-        const pingMsg = await channel.send(`👋 Hoş geldin ${member}! Sunucuya giriş yapabilmek ve diğer kanalları görebilmek için lütfen yukarıdaki **"Doğrula"** butonuna basarak hesabını onaylar mısın?`);
+      if (channel) {
+        // Kullanıcıya özel olarak kanalı görme yetkisi tanımla (Diğer üyeler göremez)
+        await channel.permissionOverwrites.create(member.id, {
+          ViewChannel: true,
+          SendMessages: false, // Kanalda yazamasın, sadece butona tıklasın
+          ReadMessageHistory: true
+        });
+
+        const pingMsg = await channel.send(`👋 Hoş geldin ${member}! Sunucuya giriş yapabilmek ve kanalları görebilmek için lütfen yukarıdaki yeşil **"Doğrula"** butonuna basarak hesabını onaylar mısın?`);
         
-        // Kanalın temiz kalması için bu yönlendirme mesajını 3 dakika sonra otomatik sileriz
+        // Kullanıcı 3 dakika içinde doğrulama yapmazsa izni ve mesajı temizle
         setTimeout(async () => {
           try {
             await pingMsg.delete().catch(() => null);
+            // Kullanıcıya özel izni kaldır
+            await channel.permissionOverwrites.delete(member.id).catch(() => null);
           } catch (delErr) {
             // Sessiz kal
           }
         }, 3 * 60 * 1000); // 3 dakika
       }
     } catch (err) {
-      console.error('[HATA] Yönlendirme pinglemesi gönderilemedi:', err);
+      console.error('[HATA] Özel üye pinglemesi ve izin ayarı yapılamadı:', err);
     }
   }
 }

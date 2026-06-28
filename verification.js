@@ -29,6 +29,12 @@ export async function handleVerificationInteraction(interaction) {
     await member.roles.remove(UNVERIFIED_ROLE_ID).catch(e => console.error('Unverified rolü silinemedi:', e));
     await member.roles.add(VERIFIED_ROLE_ID);
 
+    // Doğrulama kanalındaki kullanıcıya özel izinleri kaldır
+    const verificationChannel = await guild.channels.fetch(VERIFICATION_CHANNEL_ID).catch(() => null);
+    if (verificationChannel) {
+      await verificationChannel.permissionOverwrites.delete(member.id).catch(() => null);
+    }
+
     // 2. Kullanıcıya başarı mesajı dön (sadece kendisinin göreceği şekilde)
     await interaction.reply({
       content: '✅ Doğrulama başarılı! Sunucuya hoş geldiniz.',
