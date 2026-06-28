@@ -1,6 +1,6 @@
 import { logSecurityEvent } from './security.js';
 
-const UNVERIFIED_ROLE_ID = '1520827364123082953';
+const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE_ID;
 
 /**
  * Sunucuya biri katıldığında tetiklenir

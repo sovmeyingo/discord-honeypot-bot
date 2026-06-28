@@ -1,9 +1,9 @@
 import { EmbedBuilder } from 'discord.js';
 
-const UNVERIFIED_ROLE_ID = '1520827364123082953';
-const VERIFIED_ROLE_ID = '1502711899371081937';
-const WELCOME_CHANNEL_ID = '1502756130399584429';
-const VERIFICATION_CHANNEL_ID = '1520828797967143022';
+const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE_ID;
+const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
+const WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID;
+const VERIFICATION_CHANNEL_ID = process.env.VERIFICATION_CHANNEL_ID;
 
 /**
  * Butonla doğrulama etkileşiminin işlenmesi
