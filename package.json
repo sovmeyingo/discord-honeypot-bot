@@ -1,0 +1,25 @@
+{
+  "name": "discord-honeypot-bot",
+  "version": "1.0.0",
+  "description": "Discord sunucunuzu spam ve raid botlarından korumak için özel honeypot botu.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "register": "node register.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "honeypot",
+    "security",
+    "anti-spam"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  }
+}
