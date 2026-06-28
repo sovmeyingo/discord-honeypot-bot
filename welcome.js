@@ -1,6 +1,7 @@
 import { logSecurityEvent } from './security.js';
 
 const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE_ID;
+const VERIFICATION_CHANNEL_ID = process.env.VERIFICATION_CHANNEL_ID;
 
 /**
  * Sunucuya biri katıldığında tetiklenir
@@ -37,6 +38,26 @@ export async function handleMemberJoin(member) {
     console.log(`[ROL] ${member.user.tag} sunucuya katıldı. Otomatik "Doğrulanmamış" rolü verildi.`);
   } catch (error) {
     console.error(`[HATA] Otomatik doğrulanmamış rol (${UNVERIFIED_ROLE_ID}) verilirken hata oluştu:`, error);
-    console.error(`Botun rolünün, sunucu ayarlarında "Doğrulanmamış" rolünün üstünde olduğundan emin olun.`);
+  }
+
+  // 3. Doğrulama kanalında kullanıcıyı etiketleyen geçici uyarı mesajı
+  if (VERIFICATION_CHANNEL_ID) {
+    try {
+      const channel = await member.guild.channels.fetch(VERIFICATION_CHANNEL_ID).catch(() => null);
+      if (channel && channel.isTextBased()) {
+        const pingMsg = await channel.send(`👋 Hoş geldin ${member}! Sunucuya giriş yapabilmek ve diğer kanalları görebilmek için lütfen yukarıdaki **"Doğrula"** butonuna basarak hesabını onaylar mısın?`);
+        
+        // Kanalın temiz kalması için bu yönlendirme mesajını 3 dakika sonra otomatik sileriz
+        setTimeout(async () => {
+          try {
+            await pingMsg.delete().catch(() => null);
+          } catch (delErr) {
+            // Sessiz kal
+          }
+        }, 3 * 60 * 1000); // 3 dakika
+      }
+    } catch (err) {
+      console.error('[HATA] Yönlendirme pinglemesi gönderilemedi:', err);
+    }
   }
 }
