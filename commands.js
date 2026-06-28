@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import { PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 /**
  * Slash komutlarının işlenmesi
@@ -81,6 +81,39 @@ export async function handleInteraction(interaction) {
       }
     } catch (error) {
       return interaction.reply({ content: `❌ Test bildirimi gönderilirken hata oluştu: ${error.message}`, ephemeral: true });
+    }
+  }
+
+  // Doğrulama kurma komutu
+  if (commandName === 'dogrulama-kur') {
+    try {
+      const embed = new EmbedBuilder()
+        .setTitle('🍯 Sunucu Doğrulaması')
+        .setDescription('Sunucumuza hoş geldiniz! Kanalları görebilmek ve aktif üye olabilmek için lütfen aşağıdaki yeşil **"Doğrula"** butonuna tıklayarak hesabınızı onaylayın.')
+        .setColor(0x00ff00)
+        .setThumbnail(guild.iconURL({ dynamic: true }))
+        .setFooter({ text: 'Honeypot Security System', iconURL: interaction.client.user.displayAvatarURL() });
+
+      const button = new ButtonBuilder()
+        .setCustomId('verify_user')
+        .setLabel('🟢 Doğrula')
+        .setStyle(ButtonStyle.Success);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      // Etkileşim yapılan kanala gönder
+      await interaction.channel.send({ embeds: [embed], components: [row] });
+      
+      return interaction.reply({
+        content: '✅ Doğrulama (Captcha) paneli bu kanala başarıyla kuruldu!',
+        ephemeral: true
+      });
+    } catch (error) {
+      console.error('[HATA] Doğrulama paneli kurulamadı:', error);
+      return interaction.reply({
+        content: `❌ Panel kurulurken hata oluştu: ${error.message}`,
+        ephemeral: true
+      });
     }
   }
 }

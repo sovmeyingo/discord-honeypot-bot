@@ -22,7 +22,10 @@ const commands = [
     .setDescription('Honeypot sistem durumunu ve yapılandırılan kanalları gösterir.'),
   new SlashCommandBuilder()
     .setName('tuzak-test')
-    .setDescription('Honeypot log kanalına test mesajı göndererek sistemi kontrol eder.')
+    .setDescription('Honeypot log kanalına test mesajı göndererek sistemi kontrol eder.'),
+  new SlashCommandBuilder()
+    .setName('dogrulama-kur')
+    .setDescription('Bulunduğunuz kanala butonlu doğrulama (Captcha) paneli kurar.')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(token);

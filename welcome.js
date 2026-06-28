@@ -1,39 +1,42 @@
+import { logSecurityEvent } from './security.js';
+
+const UNVERIFIED_ROLE_ID = '1520827364123082953';
+
 /**
- * Yeni üye katıldığında otomatik rol ve hoş geldin mesajı lojiği
+ * Sunucuya biri katıldığında tetiklenir
  * @param {import('discord.js').GuildMember} member 
  */
 export async function handleMemberJoin(member) {
-  const welcomeRoleId = process.env.WELCOME_ROLE_ID;
-  const welcomeChannelId = process.env.WELCOME_CHANNEL_ID;
+  // 1. Hesap Yaşı Kontrolü (Minimum 3 Gün)
+  // 3 gün = 3 * 24 * 60 * 60 * 1000 milisaniye
+  const minAgeMs = 3 * 24 * 60 * 60 * 1000;
+  const accountAgeMs = Date.now() - member.user.createdTimestamp;
 
-  // 1. Yeni gelen üyeye otomatik rol tanımlama
-  if (welcomeRoleId && welcomeRoleId !== 'YOUR_WELCOME_ROLE_ID_HERE') {
+  if (accountAgeMs < minAgeMs) {
     try {
-      await member.roles.add(welcomeRoleId);
-      console.log(`[ROL] ${member.user.tag} kullanıcısına otomatik rol verildi.`);
-    } catch (error) {
-      console.error(`[HATA] Otomatik rol (${welcomeRoleId}) verilirken hata oluştu:`, error);
-      console.error(`Not: Botun rolünün sunucu ayarlarında verilecek rolden daha üstte olduğundan emin olun.`);
+      console.log(`[GÜVENLİK] Şüpheli Hesap Engellendi: ${member.user.tag} (${member.id})`);
+      
+      // Kullanıcıyı sunucudan at
+      await member.kick('Güvenlik: Discord hesabı 3 günden daha yeni (Şüpheli bot/raid hesabı).');
+
+      // Güvenlik loguna bildirim gönder
+      await logSecurityEvent(
+        member.guild,
+        'Yeni Hesap Engeli (Anti-Raid)',
+        `Sunucuya katılmaya çalışan **${member.user.tag}** (${member.id}) hesabı **3 günden daha yeni** olduğu için sunucudan otomatik olarak atıldı (kick).`
+      );
+      return; // İşlemleri sonlandır
+    } catch (err) {
+      console.error('[HATA] Şüpheli hesap atılırken hata oluştu:', err);
     }
   }
 
-  // 2. Belirtilen kanala hoş geldin mesajı gönderme
-  if (welcomeChannelId && welcomeChannelId !== 'YOUR_WELCOME_CHANNEL_ID_HERE') {
-    try {
-      const channel = await member.guild.channels.fetch(welcomeChannelId);
-      if (channel && channel.isTextBased()) {
-        const memberCount = member.guild.memberCount;
-        const guildName = member.guild.name;
-
-        // Görseldeki şablonun birebir aynısı:
-        // ✨ **Hoş Geldin** @Kvaratshelia! **1920x1080** topluluğumuza hoş geldin! Sunucumuzun 40. üyesi oldun! 🎉
-        const messageText = `✨ **Hoş Geldin** ${member}! **${guildName}** topluluğumuza hoş geldin! Sunucumuzun ${memberCount}. üyesi oldun! 🎉`;
-
-        await channel.send(messageText);
-        console.log(`[MESAJ] ${member.user.tag} için hoş geldin mesajı başarıyla gönderildi.`);
-      }
-    } catch (error) {
-      console.error(`[HATA] Hoş geldin mesajı gönderilirken hata oluştu:`, error);
-    }
+  // 2. Doğrulanmamış Rolünü Tanımlama (1520827364123082953)
+  try {
+    await member.roles.add(UNVERIFIED_ROLE_ID);
+    console.log(`[ROL] ${member.user.tag} sunucuya katıldı. Otomatik "Doğrulanmamış" rolü verildi.`);
+  } catch (error) {
+    console.error(`[HATA] Otomatik doğrulanmamış rol (${UNVERIFIED_ROLE_ID}) verilirken hata oluştu:`, error);
+    console.error(`Botun rolünün, sunucu ayarlarında "Doğrulanmamış" rolünün üstünde olduğundan emin olun.`);
   }
 }

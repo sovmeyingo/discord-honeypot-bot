@@ -4,6 +4,8 @@ import http from 'http';
 import { handleHoneypotMessage } from './honeypot.js';
 import { handleInteraction } from './commands.js';
 import { handleMemberJoin } from './welcome.js';
+import { checkAntiSpam, checkAntiLink, checkAntiMalware } from './security.js';
+import { handleVerificationInteraction, startVerificationReminder } from './verification.js';
 
 dotenv.config();
 
@@ -27,9 +29,12 @@ const client = new Client({
 client.once('ready', () => {
   console.log(`\x1b[32m[BAŞARILI] Bot başarıyla bağlandı! Aktif kullanıcı: ${client.user.tag}\x1b[0m`);
   console.log(`[BİLGİ] Davet linki oluşturmak için Client ID: ${process.env.CLIENT_ID || 'Belirtilmemiş'}`);
+  
+  // Doğrulama yapmayanlar için 4 saatlik hatırlatıcı döngüsünü başlat
+  startVerificationReminder(client);
 });
 
-// Yeni üye katıldığında tetiklenen olay (Rol verme ve hoş geldin mesajı)
+// Yeni üye katıldığında tetiklenen olay (Rol verme ve yaş engeli kontrolü)
 client.on('guildMemberAdd', async (member) => {
   try {
     await handleMemberJoin(member);
@@ -38,22 +43,43 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
-// Yeni mesaj atıldığında honeypot denetimini tetikle
+// Yeni mesaj atıldığında güvenlik ve honeypot denetimlerini tetikle
 client.on('messageCreate', async (message) => {
+  // DM'leri veya botları es geç
+  if (!message.guild || message.author.bot) return;
+
   try {
+    // 1. Güvenlik Denetimleri (Anti-Spam, Anti-Link, Anti-Malware)
+    const isSpam = await checkAntiSpam(message);
+    if (isSpam) return;
+
+    const isLinkScam = await checkAntiLink(message);
+    if (isLinkScam) return;
+
+    const isMalware = await checkAntiMalware(message);
+    if (isMalware) return;
+
+    // 2. Honeypot Denetimi (Yasaklı kanala yazma tuzağı)
     await handleHoneypotMessage(message);
   } catch (error) {
     console.error('[HATA] Mesaj denetlenirken bir sorun oluştu:', error);
   }
 });
 
-// Slash komutlarını dinle
+// Etkileşimleri (Slash komutları ve Buton tıklamaları) dinle
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  try {
-    await handleInteraction(interaction);
-  } catch (error) {
-    console.error('[HATA] Komut işlenirken bir sorun oluştu:', error);
+  if (interaction.isChatInputCommand()) {
+    try {
+      await handleInteraction(interaction);
+    } catch (error) {
+      console.error('[HATA] Komut işlenirken bir sorun oluştu:', error);
+    }
+  } else if (interaction.isButton()) {
+    try {
+      await handleVerificationInteraction(interaction);
+    } catch (error) {
+      console.error('[HATA] Buton doğrulama işlemi sırasında hata:', error);
+    }
   }
 });
 
