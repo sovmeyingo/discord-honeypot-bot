@@ -4,9 +4,11 @@ import http from 'http';
 import { handleHoneypotMessage } from './honeypot.js';
 import { handleInteraction } from './commands.js';
 import { handleMemberJoin } from './welcome.js';
-import { checkAntiSpam, checkAntiLink, checkAntiMalware } from './security.js';
+import { checkAntiSpam, checkAntiLink, checkAntiMalware, checkToxicity } from './security.js';
 import { handleVerificationInteraction, startVerificationReminder } from './verification.js';
 import { handleChatbotMessage } from './chatbot.js';
+import { initInviteTracker, handleInviteCreate, handleInviteDelete, trackMemberInvite } from './inviteTracker.js';
+import { trackMessage, trackVoiceState } from './stats.js';
 
 dotenv.config();
 
@@ -27,7 +29,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildInvites
   ]
 });
 
@@ -47,6 +51,9 @@ client.once('ready', async () => {
 
   // Doğrulama yapmayanlar için 4 saatlik hatırlatıcı döngüsünü başlat
   startVerificationReminder(client);
+
+  // Davet takipçisini başlat
+  await initInviteTracker(client);
 
   // Bot açıldığında eğer sahibi zaten müzik dinliyorsa durumu hemen güncelle
   setTimeout(() => {
@@ -78,19 +85,23 @@ client.once('ready', async () => {
   }, 5000);
 });
 
-// Yeni üye katıldığında tetiklenen olay (Rol verme ve yaş engeli kontrolü)
+// Yeni üye katıldığında tetiklenen olay (Rol verme, yaş engeli ve davet takibi)
 client.on('guildMemberAdd', async (member) => {
   try {
     await handleMemberJoin(member);
+    await trackMemberInvite(member);
   } catch (error) {
     console.error('[HATA] Yeni üye katılım işlemleri sırasında hata:', error);
   }
 });
 
-// Yeni mesaj atıldığında güvenlik ve honeypot denetimlerini tetikle
+// Yeni mesaj atıldığında güvenlik, aktiflik ve honeypot denetimlerini tetikle
 client.on('messageCreate', async (message) => {
   // DM'leri veya botları es geç
   if (!message.guild || message.author.bot) return;
+
+  // Aktiflik Mesaj Sayacı
+  trackMessage(message.author.id);
 
   try {
     // 1. Güvenlik Denetimleri (Anti-Spam, Anti-Link, Anti-Malware)
@@ -102,6 +113,10 @@ client.on('messageCreate', async (message) => {
 
     const isMalware = await checkAntiMalware(message);
     if (isMalware) return;
+
+    // AI Destekli Toksiklik / Kaba Kelime Filtresi
+    const isToxic = await checkToxicity(message);
+    if (isToxic) return;
 
     // 2. Honeypot Denetimi (Yasaklı kanala yazma tuzağı)
     if (message.channel.id === process.env.HONEYPOT_CHANNEL_ID) {
@@ -116,7 +131,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Etkileşimleri (Slash komutları ve Buton tıklamaları) dinle
+// Etkileşimleri (Slash komutları, Buton tıklamaları ve Modal formları) dinle
 client.on('interactionCreate', async (interaction) => {
   if (interaction.isChatInputCommand()) {
     try {
@@ -124,12 +139,39 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
       console.error('[HATA] Komut işlenirken bir sorun oluştu:', error);
     }
-  } else if (interaction.isButton()) {
+  } else if (interaction.isButton() || interaction.isModalSubmit()) {
     try {
       await handleVerificationInteraction(interaction);
     } catch (error) {
-      console.error('[HATA] Buton doğrulama işlemi sırasında hata:', error);
+      console.error('[HATA] Doğrulama işlemi sırasında hata:', error);
     }
+  }
+});
+
+// Davet oluşturulduğunda önbelleği güncelle
+client.on('inviteCreate', (invite) => {
+  try {
+    handleInviteCreate(invite);
+  } catch (err) {
+    console.error('[HATA] inviteCreate işlenirken hata:', err);
+  }
+});
+
+// Davet silindiğinde önbelleği güncelle
+client.on('inviteDelete', (invite) => {
+  try {
+    handleInviteDelete(invite);
+  } catch (err) {
+    console.error('[HATA] inviteDelete işlenirken hata:', err);
+  }
+});
+
+// Ses kanalı hareketlerini takip et (Aktiflik İstatistikleri için)
+client.on('voiceStateUpdate', (oldState, newState) => {
+  try {
+    trackVoiceState(oldState, newState);
+  } catch (err) {
+    console.error('[HATA] voiceStateUpdate işlenirken hata:', err);
   }
 });
 

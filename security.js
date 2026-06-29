@@ -220,3 +220,127 @@ export async function checkAntiMalware(message) {
   }
   return false;
 }
+
+/**
+ * AI Destekli Küfür ve Hakaret Kontrolü
+ */
+export async function checkToxicity(message) {
+  const { author, channel, guild, content } = message;
+  if (!content) return false;
+
+  let member = message.member;
+  if (!member && guild) {
+    member = await guild.members.fetch(author.id).catch(() => null);
+  }
+
+  // Güvenli kullanıcı ise es geç
+  if (isUserSafe(member)) return false;
+
+  // Hızlı Yerel Filtre (API Limitlerini korumak için sadece şüpheli kelimeler içeriyorsa AI'ye soracağız)
+  // Türkçe en sık kullanılan kaba kelimeler/küfür harfleri listesi
+  const localProfanityRegex = /(amk|sik|orospu|piç|göt|meme|yarrak|taşşak|o\.ç|kahpe|orospuçocuğu|siktir|amcık|meme|kaltak|yavşak|puşt|keke|pezevenk|gavat|şerefsiz|orospu çocuğu)/i;
+  
+  if (!localProfanityRegex.test(content.toLowerCase())) {
+    return false; // Şüpheli kelime barındırmıyorsa AI çağrısı yapıp limiti harcamayalım
+  }
+
+  const groqKey = process.env.GROQ_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const apiKey = groqKey || openrouterKey || geminiKey;
+  
+  if (!apiKey || apiKey === 'YOUR_GROQ_KEY' || apiKey === 'YOUR_OPENROUTER_KEY' || apiKey === 'YOUR_GEMINI_KEY') {
+    // API anahtarı yoksa sadece yerel filtreyle doğrudan sil (Fallback)
+    await deleteAndWarn(message, author, channel, guild, 'Yerel Filtre (Ağır Küfür)');
+    return true;
+  }
+
+  try {
+    let result = '';
+    const systemPrompt = `Görevin, aşağıdaki cümlenin bir insana yönelik ağır/ciddi bir küfür veya doğrudan kişisel bir hakaret içerip içermediğini analiz etmektir. 
+Arkadaşça kullanılan şakalaşma kelimelerini (örn: "lan", "salak", "manyak", "kanka", "amk" gibi samimi veya tepki amaçlı kelimeler birine hakaret olarak yöneltilmediyse) es geç. Sadece bir kişiye yönelik kaba, ağır küfürleri veya ciddi kişisel hakaretleri yakala.
+Eğer cümle ağır küfür/hakaret içeriyorsa sadece "EVET" yaz. İçermiyorsa sadece "HAYIR" yaz. Başka hiçbir açıklama yapma.`;
+
+    if (groqKey && groqKey !== 'YOUR_GROQ_KEY') {
+      result = await askAICompletions(content, systemPrompt, groqKey, 'https://api.groq.com/openai/v1/chat/completions', 'llama-3.1-8b-instant');
+    } else if (openrouterKey && openrouterKey !== 'YOUR_OPENROUTER_KEY') {
+      result = await askAICompletions(content, systemPrompt, openrouterKey, 'https://openrouter.ai/api/v1/chat/completions', 'meta-llama/llama-3-8b-instruct:free');
+    } else if (geminiKey && geminiKey !== 'YOUR_GEMINI_KEY') {
+      result = await askGeminiCompletions(content, systemPrompt, geminiKey);
+    }
+
+    if (result.trim().toUpperCase().includes('EVET')) {
+      await deleteAndWarn(message, author, channel, guild, 'Yapay Zeka Filtresi (Ağır Küfür/Hakaret)');
+      return true;
+    }
+  } catch (err) {
+    console.error('[AI KÜFÜR FİLTRESİ HATA]', err);
+    // Hata durumunda yerel filtreden geçtiği için yine de silebiliriz (güvenli tarafta kalmak için)
+    await deleteAndWarn(message, author, channel, guild, 'Yerel Süzgeç (Hata Durumu)');
+    return true;
+  }
+
+  return false;
+}
+
+// Mesajı silip uyarı veren yardımcı fonksiyon
+async function deleteAndWarn(message, author, channel, guild, filterType) {
+  try {
+    if (message.deletable) await message.delete().catch(() => null);
+    
+    // Siciline ceza ekle
+    const { addInfraction } = await import('./moderation.js');
+    addInfraction(author.id, 'UYARI', `Otomatik Filtre: Küfür/Hakaret kullanımı.`, 'SYSTEM');
+
+    const warnMsg = await channel.send(`⚠️ ${author}, sunucumuzda küfür ve hakaret kullanımı yasaktır! (Mesajınız otomatik olarak silindi ve sicilinize uyarı eklendi).`);
+    setTimeout(() => warnMsg.delete().catch(() => {}), 10000);
+
+    await logSecurityEvent(
+      guild,
+      'Küfür / Hakaret Engeli',
+      `**Kullanıcı:** ${author.tag} (${author})\n**Filtre:** ${filterType}\n**Mesaj:** ||${message.content}||\n\n*Not: Mesaj otomatik olarak silindi ve sicile uyarı eklendi.*`
+    );
+  } catch (err) {
+    console.error('[SECURITY DELETE HATA]', err);
+  }
+}
+
+// AI Yardımcıları
+async function askAICompletions(prompt, systemPrompt, apiKey, url, model) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://github.com/discord-honeypot-bot',
+      'X-Title': 'Discord Honeypot Bot'
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 10
+    })
+  });
+  if (!response.ok) return 'HAYIR';
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || 'HAYIR';
+}
+
+async function askGeminiCompletions(prompt, systemPrompt, apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nAnaliz edilecek cümle: "${prompt}"` }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 10 }
+    })
+  });
+  if (!response.ok) return 'HAYIR';
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'HAYIR';
+}
