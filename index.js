@@ -66,7 +66,7 @@ client.once('ready', async () => {
             activities: [{
               name: 'custom',
               type: ActivityType.Custom,
-              state: `${song} - ${artist}`
+              state: `🎵 ${song} - ${artist}`
             }]
           });
           console.log(`[SPOTIFY] Bot açılışında Spotify durumu algılandı: ${song} - ${artist}`);
@@ -141,7 +141,7 @@ client.on('presenceUpdate', (oldPresence, newPresence) => {
   if (spotifyActivity) {
     const song = spotifyActivity.details;
     const artist = spotifyActivity.state;
-    const activityText = `${song} - ${artist}`;
+    const activityText = `🎵 ${song} - ${artist}`;
     
     client.user.setPresence({
       activities: [{
