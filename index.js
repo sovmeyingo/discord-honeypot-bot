@@ -6,6 +6,7 @@ import { handleInteraction } from './commands.js';
 import { handleMemberJoin } from './welcome.js';
 import { checkAntiSpam, checkAntiLink, checkAntiMalware } from './security.js';
 import { handleVerificationInteraction, startVerificationReminder } from './verification.js';
+import { handleChatbotMessage } from './chatbot.js';
 
 dotenv.config();
 
@@ -103,7 +104,13 @@ client.on('messageCreate', async (message) => {
     if (isMalware) return;
 
     // 2. Honeypot Denetimi (Yasaklı kanala yazma tuzağı)
-    await handleHoneypotMessage(message);
+    if (message.channel.id === process.env.HONEYPOT_CHANNEL_ID) {
+      await handleHoneypotMessage(message);
+      return;
+    }
+
+    // 3. AI Chatbot Denetimi ("ai " ile başlayan mesajlar)
+    await handleChatbotMessage(message);
   } catch (error) {
     console.error('[HATA] Mesaj denetlenirken bir sorun oluştu:', error);
   }
