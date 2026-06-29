@@ -62,7 +62,13 @@ client.once('ready', async () => {
         if (spotifyActivity) {
           const song = spotifyActivity.details;
           const artist = spotifyActivity.state;
-          client.user.setActivity(`${song} - ${artist}`, { type: ActivityType.Listening });
+          client.user.setPresence({
+            activities: [{
+              name: 'custom',
+              type: ActivityType.Custom,
+              state: `${song} - ${artist}`
+            }]
+          });
           console.log(`[SPOTIFY] Bot açılışında Spotify durumu algılandı: ${song} - ${artist}`);
           break;
         }
@@ -137,11 +143,17 @@ client.on('presenceUpdate', (oldPresence, newPresence) => {
     const artist = spotifyActivity.state;
     const activityText = `${song} - ${artist}`;
     
-    client.user.setActivity(activityText, { type: ActivityType.Listening });
+    client.user.setPresence({
+      activities: [{
+        name: 'custom',
+        type: ActivityType.Custom,
+        state: activityText
+      }]
+    });
     console.log(`[SPOTIFY] Bot durumu güncellendi: ${activityText}`);
   } else {
     // Spotify durdurulduğunda durumu temizle
-    client.user.setActivity(null);
+    client.user.setPresence({ activities: [] });
     console.log('[SPOTIFY] Spotify durduruldu, bot durumu temizlendi.');
   }
 });
