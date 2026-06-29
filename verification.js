@@ -69,8 +69,8 @@ async function generateCaptchaImage(text) {
     const r = Math.floor(Math.random() * 150);
     const g = Math.floor(Math.random() * 150);
     const b = Math.floor(Math.random() * 150);
-    // RGBA hexadecimal rengi
-    const color = (r << 24) + (g << 16) + (b << 8) + 255;
+    // RGBA hexadecimal rengi (işaretsiz 32-bit tamsayı olması için >>> 0 kullanılır)
+    const color = ((r << 24) + (g << 16) + (b << 8) + 255) >>> 0;
     
     drawLine(image, startX, startY, endX, endY, color);
   }
@@ -83,7 +83,7 @@ async function generateCaptchaImage(text) {
     const r = Math.floor(Math.random() * 255);
     const g = Math.floor(Math.random() * 255);
     const b = Math.floor(Math.random() * 255);
-    const color = (r << 24) + (g << 16) + (b << 8) + 200;
+    const color = ((r << 24) + (g << 16) + (b << 8) + 200) >>> 0;
     
     image.setPixelColor(color, px, py);
   }
