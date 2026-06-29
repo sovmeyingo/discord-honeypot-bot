@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
 import dotenv from 'dotenv';
 import http from 'http';
 import { handleHoneypotMessage } from './honeypot.js';
@@ -16,22 +16,59 @@ if (!token || token === 'YOUR_BOT_TOKEN_HERE') {
   process.exit(1);
 }
 
+// Bot sahibi ID'sini saklamak için değişken
+let ownerId = null;
+
 // Bot istemcisi kurulumu (Gerekli Gateway Intent'leri ile)
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildPresences
   ]
 });
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`\x1b[32m[BAŞARILI] Bot başarıyla bağlandı! Aktif kullanıcı: ${client.user.tag}\x1b[0m`);
   console.log(`[BİLGİ] Davet linki oluşturmak için Client ID: ${process.env.CLIENT_ID || 'Belirtilmemiş'}`);
   
+  try {
+    const app = await client.application.fetch();
+    if (app.owner) {
+      ownerId = app.owner.ownerId || app.owner.id;
+      console.log(`[BİLGİ] Bot Sahibi ID'si başarıyla alındı: ${ownerId}`);
+    }
+  } catch (err) {
+    console.error('[HATA] Bot sahibi bilgisi alınamadı:', err);
+  }
+
   // Doğrulama yapmayanlar için 4 saatlik hatırlatıcı döngüsünü başlat
   startVerificationReminder(client);
+
+  // Bot açıldığında eğer sahibi zaten müzik dinliyorsa durumu hemen güncelle
+  setTimeout(() => {
+    const targetUserId = process.env.SPOTIFY_TRACK_USER_ID || ownerId;
+    if (!targetUserId) return;
+    
+    for (const guild of client.guilds.cache.values()) {
+      const member = guild.members.cache.get(targetUserId);
+      if (member && member.presence) {
+        const activities = member.presence.activities || [];
+        const spotifyActivity = activities.find(
+          (activity) => activity.name === 'Spotify' && activity.type === ActivityType.Listening
+        );
+        if (spotifyActivity) {
+          const song = spotifyActivity.details;
+          const artist = spotifyActivity.state;
+          client.user.setActivity(`${song} - ${artist}`, { type: ActivityType.Listening });
+          console.log(`[SPOTIFY] Bot açılışında Spotify durumu algılandı: ${song} - ${artist}`);
+          break;
+        }
+      }
+    }
+  }, 5000);
 });
 
 // Yeni üye katıldığında tetiklenen olay (Rol verme ve yaş engeli kontrolü)
@@ -80,6 +117,32 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
       console.error('[HATA] Buton doğrulama işlemi sırasında hata:', error);
     }
+  }
+});
+
+// Spotify durumunu takip edip botun durumunu güncelleme olayı
+client.on('presenceUpdate', (oldPresence, newPresence) => {
+  if (!newPresence || !newPresence.userId) return;
+
+  const targetUserId = process.env.SPOTIFY_TRACK_USER_ID || ownerId;
+  if (!targetUserId || newPresence.userId !== targetUserId) return;
+
+  const activities = newPresence.activities || [];
+  const spotifyActivity = activities.find(
+    (activity) => activity.name === 'Spotify' && activity.type === ActivityType.Listening
+  );
+
+  if (spotifyActivity) {
+    const song = spotifyActivity.details;
+    const artist = spotifyActivity.state;
+    const activityText = `${song} - ${artist}`;
+    
+    client.user.setActivity(activityText, { type: ActivityType.Listening });
+    console.log(`[SPOTIFY] Bot durumu güncellendi: ${activityText}`);
+  } else {
+    // Spotify durdurulduğunda durumu temizle
+    client.user.setActivity(null);
+    console.log('[SPOTIFY] Spotify durduruldu, bot durumu temizlendi.');
   }
 });
 
